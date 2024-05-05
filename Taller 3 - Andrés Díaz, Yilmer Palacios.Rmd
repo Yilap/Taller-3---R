@@ -420,5 +420,5 @@ modelplot(modelo,coef_omit="Intercept",coef_rename = TRUE) +
   theme(axis.text=element_text(size=5,face="bold"))
 
 
-"hola"
+"hola mundo"
 ```
