@@ -1,0 +1,158 @@
+---
+title: "Segundo Punto - Taller 3"
+author: "Andrés Díaz - Yilmer Palacios"
+date: "2024-04-30"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+### Preparamos librerías
+
+```{r}
+
+rm(list = ls())
+
+librerias <- (c("rvest", "purrr", "tidyverse","tokenizers","syuzhet","wordcloud",
+                "tm","cowplot","ggwordcloud","modelsummary","estimatr","sandwich",
+                "writexl","readxl","quanteda","countries","sf"))
+
+if(length(setdiff(librerias, rownames(installed.packages()))) > 0){
+  install.packages(setdiff(librerias, rownames(installed.packages())))}
+invisible(sapply(librerias, require, character.only = TRUE,quietly = TRUE))
+
+
+```
+
+# SEGUNDO PUNTO
+
+##2.1. Realicen un código de R que realice webscraping de Wikipedia para extraer la información de los conflictos desde 1945–1989. Este código debe tener como resultado un DataFrame que contenga una columna con el nombre oficial del país que tuvo conflicto con USA (recuerde que puede ser vencedor o perdedor).
+
+### Pista: esto lo puede hacer identificando los nombres únicos que aparecen en conflictos y creando un Dataframe posteriormente con esta lista. Por otra parte, pueden obtener una lista de los nombres de los países del mundo en internet, Wikipedia, librerías como “countries” en R. Además, pueden basarse en el código realizado en clase.
+
+
+```{r}
+
+# Definimos la URL de interés de Wikipedia (Lista de Guerras de 1945 - 1989)
+url <- "https://en.wikipedia.org/wiki/List_of_wars:_1945%E2%80%931989"
+
+
+batallas <- url %>% read_html() %>%    # Hacemos Webscrapping de las tablas
+  html_table(fill = TRUE)
+
+# Hacemos procesamiento de la data
+
+df <- batallas %>% reduce(bind_rows)
+df <- df %>% select(c(4,5)) %>% na.omit()  # Borramos las columbas innecesarias y las filas con NA
+colnames(df) <- c("Victoria", "Derrota")   # Ajustamos nombres de columna
+
+
+convertidor <- function(Vector){
+  
+  # Esta función toma un vector con elementos de texto, identifica si los elementos tienen las
+  # Palabras "United" y "States", si si, cambia toda la cadena de texto por la palabra United States para
+  # Eliminar a los aliados de Estados Unidos de la base de datos.
+  
+  ##Inputs
+  #bd_libros (Vector): Un Vector a tratar
+  ##Output
+  #bd_libros (dataframe): Vector tratado
+  
+  
+  USA <- c("United", "States")
+  df.corpus <- corpus(Vector)
+  df.tokens <- tokens(df.corpus, what = "word")
+  conflictosUSA <- tokens_select(df.tokens, pattern = USA, selection = "keep")
+  out <- convert(dfm(conflictosUSA), to = "data.frame")     # Convertimos lista como dataframe
+  out[,4] <- ifelse(out[,2] > 0 & out[,3] > 0, TRUE, FALSE) # Creamos booleano que es TRUE si ambas palabras son "United" "States"
+  out[,5] <- Vector               # Agregamos columna con texto concatenado
+  out <- replace(out$V5, out$V4 == TRUE, "United States")
+
+return(out)
+
+}
+
+Vector1 <- df$Victoria
+Vector2 <- df$Derrota
+df[,1] <- convertidor(Vector1)
+df[,2] <- convertidor(Vector2) 
+
+
+df[,3] <- paste(df$Victoria, df$Derrota)
+colnames(df) <- c("Victoria", "Derrota", "Concatenado")
+
+# Identificamos las filas donde no se mencione a USA
+
+USA <- c("United", "States")
+colnames(df)
+df.corpus <- corpus(df, text_field = "Concatenado" )
+df.tokens <- tokens(df.corpus, what = "word")
+conflictosUSA <- tokens_select(df.tokens, pattern = USA, selection = "keep")
+
+# Creamos vector que indique en que filas no se menciona a USA 
+#(por alguna razón unlist no nos guarda como dataframe los nombres de las filas del vector entonces
+# tuvimos que seguir otra ruta)
+
+out <- convert(dfm(conflictosUSA), to = "data.frame")     # Convertimos lista como dataframe
+out[,4] <- ifelse(out[,2] > 0 & out[,3] > 0, TRUE, FALSE) # Creamos booleano que es TRUE si el vector contiene ambas palabras "United" "States"
+out[,5] <- df$Concatenado               # Agregamos columna con texto concatenado
+outfiltrado <- out[out$V4 == TRUE, ]    # Eliminamos filas con FALSE
+outfiltrado <- outfiltrado %>% select(c(5)) %>% na.omit()   # Dejamos solo la fila de interés
+colnames(outfiltrado) <- "Texto Concatenado"
+
+# Volvemos a identificar palabras para detectar a los países con la función country_name
+
+Outcorpus <- corpus(outfiltrado, text_field = "Texto Concatenado" )
+out.tokens <- tokens(Outcorpus, what = "word")
+finalnames <- as.data.frame(unlist(out.tokens)) # Listado de todas las palabras
+
+### Con la función identificamos los nombres de los países y los guardamos con notación a ISO 3166 - Lo del bono ;)
+paises <- country_name(finalnames[,1])   
+paises <- paises %>% na.omit()
+paises <- as.data.frame(paises)
+paises <- paises %>% distinct(paises, .keep_all = TRUE) # Borramos duplicados
+
+## Dataframe con el listado de paises que estuvieron 
+
+head(paises)
+
+```
+
+## 2.2. Descarguen el shapefile de las fronteras de los países del mundo geoBoundaries y realicen un pegue (left_join) de los datos de los países del shapefile con la base consolidada por webscraping. Para el pegue, deben utilizar el nombre del país.
+
+###Nota: Traten de revisar que los nombres coincidan para la mayoría de los países, pero no se penalizará si no ocurre un match perfecto entre las bases de datos o si por escritura omiten alguno.
+
+```{r}
+# Cargamos el ShapeFile
+
+setwd("C:/Users/Yilmer Palacios/Desktop/Solución Talleres R/Taller-3---R/")
+sf_data <- st_read(dsn= "Shape")
+
+# Realizamos el left join en la columna "paises"
+colnames(paises) <- "shapeGroup"
+ResLJ2 <- left_join(paises, sf_data, by = "shapeGroup")
+head(ResLJ2)
+
+```
+## 2.3. Presenten una visualización en el mapa del mundo de los países con los que Estados Unidos ha tenido conflictos armados durante esta época. El gráfico debe reflejar estética visual y ser autocontenido. Pueden añadirle información adicional de otros tipos de variables si quieren.
+
+```{r}
+
+# Creamos un elemento sf a partir de nuestra base con el left joint
+paises_georef <- st_as_sf(ResLJ2)
+
+# Construirmos la gráfica
+ggplot() + geom_sf(data = sf_data) + geom_sf(data = paises_georef %>% filter(shapeGroup != "USA"), fill = "red", alpha = 0.5 ) + 
+  geom_sf(data = paises_georef %>% filter(shapeGroup == "USA"), fill = "blue", alpha = 0.5 ) + 
+  theme_void() + labs(title = "Paises en conflicto con USA", subtitle = "Desde 1945 hasta 1989", caption = "Nota: Se incluyen países que apoyaron al bando contrario en conflictos donde Estados Unidos no fue el principal protagonista")
+
+
+```
+## Como se puede apreciar en el mapa, la mayoría de conflictos que tuvo USA en el siglo pasado son principalmente con los países comunistas de la época como Rusia y China, adicionalmente hay una serie de países que apoyaron a bandos contrarios a Estados Unidos por lo que aparecen como países con conflicto con USA, como en el caso de México que apoyo al bando contrario en la guerra civil de Angola, sin embargo la confrontación no fue directa con USA.
