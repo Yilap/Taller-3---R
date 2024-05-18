@@ -32,7 +32,8 @@ install.packages("ggwordcloud")
 install.packages("modelsummary")
 install.packages("estimatr")
 install.packages("sandwich")
-
+install.packages("writexl")
+install.packages("readxl")
 
 
 
@@ -52,6 +53,9 @@ library(ggwordcloud)
 library(modelsummary)
 library(estimatr)
 library(sandwich)
+library(writexl)
+library(readxl)
+
 
 ```
 
@@ -244,6 +248,12 @@ bd_libros$Categoria_libro <- factor(bd_libros$Categoria_libro)
 
 head(bd_libros)
 
+# Guardamos dataframe Bd_libros como excel
+#dir <- getwd()
+#setwd(dir)
+#write_xlsx(bd_libros, path="bd_libros.xlsx")
+#bd_libros <- read_xlsx("bd_libros.xlsx", col_names = TRUE)
+
 ```
 
 ### 1.2. Realizar un análisis exploratorio de la base de datos, presentando y explicando las estadísticas descriptivas que consideren relevantes para explicar los datos.
@@ -269,7 +279,7 @@ sort(summary(bd_libros$Categoria_libro),decreasing = TRUE)
 
 vector_text <- bd_libros$Descripcion_libro
 
-vector_text <- gsub("[^[:alnum:][:space:]]", "", vector_text)
+vector_text <- ?gsub("[^[:alnum:][:space:]]", "", vector_text)
 
 ##Creación de corpus
 
@@ -420,5 +430,4 @@ modelplot(modelo,coef_omit="Intercept",coef_rename = TRUE) +
   theme(axis.text=element_text(size=5,face="bold"))
 
 
-"hola mundo"
 ```
